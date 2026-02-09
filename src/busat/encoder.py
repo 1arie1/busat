@@ -51,7 +51,10 @@ class BusatEncoder:
         for c in self.problem.constraints:
             _collect_names(c.expression_ast, names)
         for name in sorted(names):
-            self._z3_vars[name] = z3.Int(name)
+            try:
+                self._z3_vars[name] = z3.IntVal(int(name))
+            except ValueError:
+                self._z3_vars[name] = z3.Int(name)
 
     def _ast_to_z3(self, node: ast.expr) -> Any:
         """Recursively translate a Python AST node to a Z3 expression."""

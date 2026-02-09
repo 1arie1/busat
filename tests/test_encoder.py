@@ -162,6 +162,36 @@ class TestSelfMatching:
         assert result == z3.unsat
 
 
+class TestIntegerLiterals:
+    def test_literal_multiplicity(self) -> None:
+        """Integer literals as bus multiplicity become IntVal, not variables."""
+        text = "BUS\n1: 1, a\n2: -1, b\n\nDEFS\na := 5\nb := 5\n"
+        result = _solve(text)
+        assert result == z3.sat
+
+    def test_literal_argument(self) -> None:
+        """Integer literals as bus arguments become IntVal."""
+        text = "BUS\n1: p, 7\n2: q, 7\n\nDEFS\np := 1\nq := -1\n"
+        result = _solve(text)
+        assert result == z3.sat
+
+    def test_literal_argument_mismatch(self) -> None:
+        """Different integer literal arguments cause unsat."""
+        text = "BUS\n1: p, 7\n2: q, 8\n\nDEFS\np := 1\nq := -1\n"
+        result = _solve(text)
+        assert result == z3.unsat
+
+    def test_literal_not_in_model_vars(self) -> None:
+        """Integer literals should not appear as named variables in get_z3_vars."""
+        text = "BUS\n1: 1, a\n2: -1, b\n\nDEFS\na := 5\nb := 5\n"
+        problem = parse_text(text)
+        encoder = BusatEncoder(problem)
+        encoder.encode()
+        z3_vars = encoder.get_z3_vars()
+        assert "a" in z3_vars
+        assert "b" in z3_vars
+
+
 class TestVariableReuse:
     def test_shared_variables(self) -> None:
         """Two buses share a variable — should still work."""
