@@ -96,23 +96,6 @@ def solve(
         sys.exit(2)
 
 
-@main.command()
-@click.option("--formula", "-f", required=True, help="Formula to check")
-@click.pass_context
-def check(ctx: click.Context, formula: str) -> None:
-    """Check satisfiability of a formula.
-
-    Example:
-        busat check --formula "(and (> x 0) (< x 10))"
-    """
-    verbose = ctx.obj["verbose"]
-    if verbose:
-        click.echo(f"Checking formula: {formula}")
-
-    # TODO: Implement check logic
-    click.echo("Check functionality not yet implemented.")
-    click.echo("Please specify the behavior in AGENT.md")
-
 
 if __name__ == "__main__":
     main()
