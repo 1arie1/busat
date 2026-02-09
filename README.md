@@ -1,4 +1,4 @@
-# BUSAT
+# 🚌 BUSAT
 
 A Python CLI tool for solving pairwise satisfiability of bus interaction constraints from OpenVM using the Z3 SMT solver.
 
@@ -15,7 +15,7 @@ source venv/bin/activate
 pip install -e ".[dev]"
 ```
 
-## Input Format
+## 🚏 Input Format
 
 Input files (`.bus`) have three sections:
 
@@ -23,7 +23,7 @@ Input files (`.bus`) have three sections:
 - **DEFS** — variable definitions: `var := expression`
 - **CONSTRAINTS** — arithmetic constraints: `expression`
 
-Two bus interactions balance when their multiplicities sum to 0 and all corresponding arguments are equal. A bus can also self-balance when its multiplicity is 0. BUSAT checks whether all buses can be partitioned into balanced pairs.
+Two bus interactions balance when their multiplicities sum to 0 and all corresponding arguments are equal. A bus can also self-balance when its multiplicity is 0. BUSAT checks whether all buses can be partitioned into balanced pairs. 🚌💨
 
 ### Example
 
@@ -44,7 +44,7 @@ b >= 0
 c > b
 ```
 
-## Usage
+## 🚌 Usage
 
 ```bash
 # Solve a problem (exit code: 0=sat, 1=unsat, 2=error)
@@ -80,6 +80,21 @@ Variable assignments:
   y = 0
   z = 2
 ```
+
+## 🔧 SMT Encoding
+
+BUSAT translates the bus matching problem into an SMT formula over integer arithmetic and Booleans:
+
+1. **Definitions** become equalities: `a := b + 1` encodes as `a == b + 1`.
+2. **Constraints** are translated directly into Z3 comparisons.
+3. **Bus matching** uses Boolean indicator variables:
+   - For each pair of buses `(i, j)`, a Boolean `m_i_j` indicates they are matched.
+   - `m_i_j => mul_i + mul_j == 0` — multiplicities must cancel.
+   - `m_i_j => arg_k_i == arg_k_j` — all corresponding arguments must be equal.
+   - For each bus `i`, a self-match Boolean `m_i_i` allows it to balance alone: `m_i_i => mul_i == 0` (no argument constraints).
+   - Per bus, pseudo-Boolean constraints `AtMost(..., 1)` and `AtLeast(..., 1)` ensure exactly one match.
+
+Use `--encode-only` to inspect the generated SMT-LIB formula.
 
 ## Development
 
@@ -122,6 +137,11 @@ busat/
 ├── AGENT.md
 └── README.md
 ```
+
+## Authors
+
+- 🧑‍💻 Arie Gurfinkel
+- 🤖 Claude Code
 
 ## License
 
