@@ -19,6 +19,7 @@ class TestSolveFromFile:
         assert result["model"] is not None
         assert result["model"]["p"] == 1
         assert result["model"]["q"] == -1
+        assert result["matching"] == [(1, 2)]
 
     def test_simple_unsat(self) -> None:
         result = solve_from_file(str(FIXTURES / "simple_unsat.bus"))
@@ -29,6 +30,7 @@ class TestSolveFromFile:
         result = solve_from_file(str(FIXTURES / "multi_bus.bus"))
         assert result["status"] == "sat"
         assert result["model"] is not None
+        assert len(result["matching"]) == 2
 
     def test_no_defs(self) -> None:
         result = solve_from_file(str(FIXTURES / "no_defs.bus"))
@@ -114,6 +116,33 @@ class TestCLI:
         runner = CliRunner()
         result = runner.invoke(main, ["solve", "--encode-only", str(bad)])
         assert result.exit_code == 2
+
+    def test_show_model_sat(self) -> None:
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["solve", "--show-model", str(FIXTURES / "simple_sat.bus")]
+        )
+        assert result.exit_code == 0
+        assert "Bus matching:" in result.output
+        assert "bus 1 <-> bus 2" in result.output
+        assert "Variable assignments:" in result.output
+        assert "p = 1" in result.output
+
+    def test_show_model_unsat(self) -> None:
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["solve", "--show-model", str(FIXTURES / "simple_unsat.bus")]
+        )
+        assert result.exit_code == 1
+        assert "Bus matching:" not in result.output
+
+    def test_show_model_self_match(self, tmp_path: Path) -> None:
+        bus_file = tmp_path / "self.bus"
+        bus_file.write_text("BUS\n1: p, a\n\nDEFS\np := 0\na := 42\n")
+        runner = CliRunner()
+        result = runner.invoke(main, ["solve", "--show-model", str(bus_file)])
+        assert result.exit_code == 0
+        assert "bus 1 <-> self" in result.output
 
 
 class TestEncodeFromFile:

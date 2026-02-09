@@ -86,13 +86,13 @@ def solve_from_file(file_path: str, timeout: int = 0) -> dict[str, Any]:
     try:
         problem = parse_file(file_path)
     except ParseError as e:
-        return {"status": "error", "model": None, "message": f"Parse error: {e}"}
+        return {"status": "error", "model": None, "matching": None, "message": f"Parse error: {e}"}
 
     try:
         encoder = BusatEncoder(problem)
         constraints = encoder.encode()
     except EncoderError as e:
-        return {"status": "error", "model": None, "message": f"Encoding error: {e}"}
+        return {"status": "error", "model": None, "matching": None, "message": f"Encoding error: {e}"}
 
     solver = BusatSolver(timeout=timeout)
     for c in constraints:
@@ -106,8 +106,17 @@ def solve_from_file(file_path: str, timeout: int = 0) -> dict[str, Any]:
         for name, var in sorted(z3_vars.items()):
             val = z3_model.eval(var, model_completion=True)
             model[name] = val.as_long() if hasattr(val, "as_long") else str(val)
-        return {"status": "sat", "model": model, "message": "SAT — satisfying assignment found"}
+        matching = []
+        for (id_a, id_b), mv in encoder.get_match_vars().items():
+            if z3.is_true(z3_model.eval(mv, model_completion=True)):
+                matching.append((id_a, id_b))
+        return {
+            "status": "sat",
+            "model": model,
+            "matching": matching,
+            "message": "SAT — satisfying assignment found",
+        }
     elif result == z3.unsat:
-        return {"status": "unsat", "model": None, "message": "UNSAT — no satisfying assignment exists"}
+        return {"status": "unsat", "model": None, "matching": None, "message": "UNSAT — no satisfying assignment exists"}
     else:
-        return {"status": "unknown", "model": None, "message": "UNKNOWN — solver could not decide"}
+        return {"status": "unknown", "model": None, "matching": None, "message": "UNKNOWN — solver could not decide"}

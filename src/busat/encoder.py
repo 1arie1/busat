@@ -20,6 +20,7 @@ class BusatEncoder:
     def __init__(self, problem: BusatProblem) -> None:
         self.problem = problem
         self._z3_vars: dict[str, z3.ArithRef] = {}
+        self._match_vars: dict[tuple[int, int], z3.BoolRef] = {}
 
     def encode(self) -> list[Any]:
         """Encode the full problem as a list of Z3 constraints."""
@@ -33,6 +34,10 @@ class BusatEncoder:
     def get_z3_vars(self) -> dict[str, z3.ArithRef]:
         """Return the mapping of variable names to Z3 variables."""
         return dict(self._z3_vars)
+
+    def get_match_vars(self) -> dict[tuple[int, int], z3.BoolRef]:
+        """Return match variables keyed by (bus_id, bus_id) pairs."""
+        return dict(self._match_vars)
 
     def _collect_variables(self) -> None:
         """Walk all expressions and create Z3 Int variables for every name."""
@@ -134,6 +139,7 @@ class BusatEncoder:
                 bi, bj = buses[i], buses[j]
                 mv = z3.Bool(f"m_{bi.id}_{bj.id}")
                 match_vars[(i, j)] = mv
+                self._match_vars[(bi.id, bj.id)] = mv
 
                 # m_i_j => mul_i + mul_j == 0
                 mul_i = self._ast_to_z3(ast.Name(id=bi.multiplicity))
@@ -152,6 +158,7 @@ class BusatEncoder:
         for i in range(n):
             bi = buses[i]
             mv = z3.Bool(f"m_{bi.id}_{bi.id}")
+            self._match_vars[(bi.id, bi.id)] = mv
             involved[i].append(mv)
 
             # m_i_i => mul_i == 0

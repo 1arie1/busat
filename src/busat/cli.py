@@ -26,6 +26,7 @@ def main(ctx: click.Context, verbose: bool) -> None:
 @click.option("--timeout", type=int, default=0, help="Solver timeout in seconds (0 = no limit)")
 @click.option("--output", "-o", type=click.Path(), help="Output file path")
 @click.option("--encode-only", is_flag=True, help="Print encoded SMT formula without solving")
+@click.option("--show-model", is_flag=True, help="Print bus matching and variable assignments")
 @click.pass_context
 def solve(
     ctx: click.Context,
@@ -33,6 +34,7 @@ def solve(
     timeout: int,
     output: str | None,
     encode_only: bool,
+    show_model: bool,
 ) -> None:
     """Solve a bus matching problem from INPUT_FILE.
 
@@ -65,7 +67,17 @@ def solve(
 
     click.echo(result["message"])
 
-    if verbose and result["status"] == "sat" and result["model"]:
+    if show_model and result["status"] == "sat":
+        click.echo("Bus matching:")
+        for id_a, id_b in result["matching"]:
+            if id_a == id_b:
+                click.echo(f"  bus {id_a} <-> self (multiplicity = 0)")
+            else:
+                click.echo(f"  bus {id_a} <-> bus {id_b}")
+        click.echo("Variable assignments:")
+        for name, val in sorted(result["model"].items()):
+            click.echo(f"  {name} = {val}")
+    elif verbose and result["status"] == "sat" and result["model"]:
         click.echo("Variable assignments:")
         for name, val in sorted(result["model"].items()):
             click.echo(f"  {name} = {val}")
