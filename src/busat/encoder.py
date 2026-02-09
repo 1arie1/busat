@@ -147,26 +147,25 @@ class BusatEncoder:
                     constraints.append(z3.Implies(mv, ai == aj))
 
         # Self-match variables: bus i balanced by itself
-        self_match: dict[int, z3.BoolRef] = {}
+        # Also collect involved match vars per bus for pseudo-boolean constraints
+        involved: dict[int, list[z3.BoolRef]] = {i: [] for i in range(n)}
         for i in range(n):
             bi = buses[i]
             mv = z3.Bool(f"m_{bi.id}_{bi.id}")
-            self_match[i] = mv
+            involved[i].append(mv)
 
             # m_i_i => mul_i == 0
             mul_i = self._ast_to_z3(ast.Name(id=bi.multiplicity))
             constraints.append(z3.Implies(mv, mul_i == 0))
 
+        for (i, j), mv in match_vars.items():
+            involved[i].append(mv)
+            involved[j].append(mv)
+
         # Per bus: exactly one match (AtMost 1 + AtLeast 1)
         for i in range(n):
-            involved = [self_match[i]]
-            for j in range(n):
-                if i == j:
-                    continue
-                key = (min(i, j), max(i, j))
-                involved.append(match_vars[key])
-            constraints.append(z3.AtMost(*involved, 1))
-            constraints.append(z3.AtLeast(*involved, 1))
+            constraints.append(z3.AtMost(*involved[i], 1))
+            constraints.append(z3.AtLeast(*involved[i], 1))
 
         return constraints
 
