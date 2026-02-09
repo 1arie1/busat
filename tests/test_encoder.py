@@ -108,12 +108,55 @@ class TestBusMatching:
         assert result == z3.sat
 
     def test_four_bus_unsat_odd_count(self) -> None:
-        """3 positive, 1 negative — can't pair all."""
+        """3 positive, 1 negative — can't pair all (no self-match possible)."""
         text = (
             "BUS\n1: p1, a1\n2: p2, a2\n3: p3, a3\n4: p4, a4\n\n"
             "DEFS\n"
             "p1 := 1\np2 := 1\np3 := 1\np4 := -1\n"
             "a1 := 10\na2 := 10\na3 := 10\na4 := 10\n"
+        )
+        result = _solve(text)
+        assert result == z3.unsat
+
+
+class TestSelfMatching:
+    def test_single_bus_zero_mult(self) -> None:
+        """A single bus with multiplicity 0 can self-match."""
+        text = "BUS\n1: p, a\n\nDEFS\np := 0\na := 42\n"
+        result = _solve(text)
+        assert result == z3.sat
+
+    def test_single_bus_nonzero_mult(self) -> None:
+        """A single bus with nonzero multiplicity cannot self-match."""
+        text = "BUS\n1: p, a\n\nDEFS\np := 1\na := 42\n"
+        result = _solve(text)
+        assert result == z3.unsat
+
+    def test_self_match_no_arg_constraint(self) -> None:
+        """Self-matching imposes no argument constraints — args are free."""
+        text = "BUS\n1: p, a\n\nDEFS\np := 0\n\nCONSTRAINTS\na == 99\n"
+        result, model, z3_vars = _solve_model(text)
+        assert result == z3.sat
+        assert model.eval(z3_vars["a"], model_completion=True).as_long() == 99
+
+    def test_three_buses_one_self_match(self) -> None:
+        """3 buses: two pair together, one self-matches with mult 0."""
+        text = (
+            "BUS\n1: p1, a1\n2: p2, a2\n3: p3, a3\n\n"
+            "DEFS\n"
+            "p1 := 1\np2 := -1\np3 := 0\n"
+            "a1 := 5\na2 := 5\na3 := 99\n"
+        )
+        result = _solve(text)
+        assert result == z3.sat
+
+    def test_three_buses_no_self_match_unsat(self) -> None:
+        """3 buses, all nonzero mult — odd count, no self-match possible."""
+        text = (
+            "BUS\n1: p1, a1\n2: p2, a2\n3: p3, a3\n\n"
+            "DEFS\n"
+            "p1 := 1\np2 := -1\np3 := 1\n"
+            "a1 := 5\na2 := 5\na3 := 5\n"
         )
         result = _solve(text)
         assert result == z3.unsat

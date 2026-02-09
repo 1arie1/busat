@@ -146,9 +146,20 @@ class BusatEncoder:
                     aj = self._ast_to_z3(ast.Name(id=arg_j))
                     constraints.append(z3.Implies(mv, ai == aj))
 
+        # Self-match variables: bus i balanced by itself
+        self_match: dict[int, z3.BoolRef] = {}
+        for i in range(n):
+            bi = buses[i]
+            mv = z3.Bool(f"m_{bi.id}_{bi.id}")
+            self_match[i] = mv
+
+            # m_i_i => mul_i == 0
+            mul_i = self._ast_to_z3(ast.Name(id=bi.multiplicity))
+            constraints.append(z3.Implies(mv, mul_i == 0))
+
         # Per bus: exactly one match (AtMost 1 + AtLeast 1)
         for i in range(n):
-            involved = []
+            involved = [self_match[i]]
             for j in range(n):
                 if i == j:
                     continue
