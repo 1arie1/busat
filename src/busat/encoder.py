@@ -32,8 +32,8 @@ class BusatEncoder:
         return constraints
 
     def get_z3_vars(self) -> dict[str, z3.ArithRef]:
-        """Return the mapping of variable names to Z3 variables."""
-        return dict(self._z3_vars)
+        """Return the mapping of variable names to Z3 variables (excludes integer literals)."""
+        return {name: var for name, var in self._z3_vars.items() if not _is_int(name)}
 
     def get_match_vars(self) -> dict[tuple[int, int], z3.BoolRef]:
         """Return match variables keyed by (bus_id, bus_id) pairs."""
@@ -51,9 +51,9 @@ class BusatEncoder:
         for c in self.problem.constraints:
             _collect_names(c.expression_ast, names)
         for name in sorted(names):
-            try:
+            if _is_int(name):
                 self._z3_vars[name] = z3.IntVal(int(name))
-            except ValueError:
+            else:
                 self._z3_vars[name] = z3.Int(name)
 
     def _ast_to_z3(self, node: ast.expr) -> Any:
@@ -178,6 +178,15 @@ class BusatEncoder:
             constraints.append(z3.AtLeast(*involved[i], 1))
 
         return constraints
+
+
+def _is_int(s: str) -> bool:
+    """Check if a string represents an integer literal."""
+    try:
+        int(s)
+        return True
+    except ValueError:
+        return False
 
 
 def _collect_names(node: ast.AST, names: set[str]) -> None:
