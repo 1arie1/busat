@@ -1,7 +1,11 @@
 """Command-line interface for BUSAT."""
 
+import json
+import sys
+
 import click
 from busat import __version__
+from busat.solver import solve_from_file, encode_from_file
 
 
 @click.group()
@@ -21,21 +25,63 @@ def main(ctx: click.Context, verbose: bool) -> None:
 @click.argument("input_file", type=click.Path(exists=True))
 @click.option("--timeout", type=int, default=0, help="Solver timeout in seconds (0 = no limit)")
 @click.option("--output", "-o", type=click.Path(), help="Output file path")
+@click.option("--encode-only", is_flag=True, help="Print encoded SMT formula without solving")
 @click.pass_context
-def solve(ctx: click.Context, input_file: str, timeout: int, output: str | None) -> None:
-    """Solve a SAT problem from INPUT_FILE.
+def solve(
+    ctx: click.Context,
+    input_file: str,
+    timeout: int,
+    output: str | None,
+    encode_only: bool,
+) -> None:
+    """Solve a bus matching problem from INPUT_FILE.
 
     Example:
-        busat solve problem.smt2
+        busat solve problem.bus
     """
     verbose = ctx.obj["verbose"]
+
+    if encode_only:
+        try:
+            smt = encode_from_file(input_file)
+        except Exception as e:
+            click.echo(f"Error: {e}", err=True)
+            sys.exit(2)
+        if output:
+            with open(output, "w") as f:
+                f.write(smt)
+            if verbose:
+                click.echo(f"SMT formula written to {output}")
+        else:
+            click.echo(smt)
+        sys.exit(0)
+
     if verbose:
         click.echo(f"Solving: {input_file}")
-        click.echo(f"Timeout: {timeout}s")
+        if timeout:
+            click.echo(f"Timeout: {timeout}s")
 
-    # TODO: Implement solver logic
-    click.echo("Solver functionality not yet implemented.")
-    click.echo("Please specify the behavior in AGENT.md")
+    result = solve_from_file(input_file, timeout=timeout)
+
+    click.echo(result["message"])
+
+    if verbose and result["status"] == "sat" and result["model"]:
+        click.echo("Variable assignments:")
+        for name, val in sorted(result["model"].items()):
+            click.echo(f"  {name} = {val}")
+
+    if output:
+        with open(output, "w") as f:
+            json.dump(result, f, indent=2)
+        if verbose:
+            click.echo(f"Results written to {output}")
+
+    if result["status"] == "sat":
+        sys.exit(0)
+    elif result["status"] == "unsat":
+        sys.exit(1)
+    else:
+        sys.exit(2)
 
 
 @main.command()

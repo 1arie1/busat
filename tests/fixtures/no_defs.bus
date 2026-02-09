@@ -1,0 +1,8 @@
+BUS
+1: p, a
+2: q, b
+
+CONSTRAINTS
+p == 1
+q == -1
+a == b

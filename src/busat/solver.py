@@ -3,6 +3,9 @@
 from typing import Any, Optional
 import z3
 
+from busat.parser import parse_file, ParseError
+from busat.encoder import BusatEncoder, EncoderError
+
 
 class BusatSolver:
     """Wrapper around Z3 solver with BUSAT-specific functionality."""
@@ -34,6 +37,10 @@ class BusatSolver:
         result = self.solver.check()
         return result == z3.sat
 
+    def check(self) -> z3.CheckSatResult:
+        """Check satisfiability and return the raw Z3 result."""
+        return self.solver.check()
+
     def get_model(self) -> Optional[z3.ModelRef]:
         """Get a model if the constraints are satisfiable.
 
@@ -45,21 +52,62 @@ class BusatSolver:
         return None
 
 
+def encode_from_file(file_path: str) -> str:
+    """Parse and encode a BUSAT problem, returning the SMT-LIB2 formula.
+
+    Args:
+        file_path: Path to input file
+
+    Returns:
+        SMT-LIB2 string of the encoded formula
+
+    Raises:
+        ParseError: If parsing fails
+        EncoderError: If encoding fails
+    """
+    problem = parse_file(file_path)
+    encoder = BusatEncoder(problem)
+    constraints = encoder.encode()
+    solver = z3.Solver()
+    solver.add(constraints)
+    return solver.sexpr()
+
+
 def solve_from_file(file_path: str, timeout: int = 0) -> dict[str, Any]:
-    """Solve a SAT problem from a file.
+    """Solve a BUSAT problem from a file.
 
     Args:
         file_path: Path to input file
         timeout: Solver timeout in seconds
 
     Returns:
-        Dictionary with solver results
+        Dictionary with keys: status, model, message
     """
-    # TODO: Implement file parsing and solving logic
-    # This is a placeholder implementation
-    solver = BusatSolver(timeout=timeout)
+    try:
+        problem = parse_file(file_path)
+    except ParseError as e:
+        return {"status": "error", "model": None, "message": f"Parse error: {e}"}
 
-    return {
-        "status": "unknown",
-        "message": "File solving not yet implemented. Specify behavior in AGENT.md"
-    }
+    try:
+        encoder = BusatEncoder(problem)
+        constraints = encoder.encode()
+    except EncoderError as e:
+        return {"status": "error", "model": None, "message": f"Encoding error: {e}"}
+
+    solver = BusatSolver(timeout=timeout)
+    for c in constraints:
+        solver.add_constraint(c)
+
+    result = solver.check()
+    if result == z3.sat:
+        z3_model = solver.solver.model()
+        z3_vars = encoder.get_z3_vars()
+        model = {}
+        for name, var in sorted(z3_vars.items()):
+            val = z3_model.eval(var, model_completion=True)
+            model[name] = val.as_long() if hasattr(val, "as_long") else str(val)
+        return {"status": "sat", "model": model, "message": "SAT — satisfying assignment found"}
+    elif result == z3.unsat:
+        return {"status": "unsat", "model": None, "message": "UNSAT — no satisfying assignment exists"}
+    else:
+        return {"status": "unknown", "model": None, "message": "UNKNOWN — solver could not decide"}

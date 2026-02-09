@@ -1,0 +1,11 @@
+BUS
+1: p, a, b
+2: q, x, y
+
+DEFS
+p := 1
+q := 1
+
+CONSTRAINTS
+a > 0
+x > 0
