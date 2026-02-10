@@ -143,7 +143,7 @@ class TestSolveFromFileMem:
     def test_mem_sat(self) -> None:
         result = solve_from_file(str(FIXTURES / "mem_sat.bus"))
         assert result["status"] == "sat"
-        assert result["mem_matching"] == [(1, 2)]
+        assert result["mem_matching"] == [(1, 2, 1)]
         assert result["matching"] == []
 
     def test_mem_unsat(self) -> None:
@@ -155,7 +155,7 @@ class TestSolveFromFileMem:
         result = solve_from_file(str(FIXTURES / "bus_and_mem_sat.bus"))
         assert result["status"] == "sat"
         assert result["matching"] == [(1, 2)]
-        assert result["mem_matching"] == [(3, 4)]
+        assert result["mem_matching"] == [(3, 4, 1)]
 
 
 class TestCLIMem:
@@ -184,7 +184,7 @@ class TestCLIMem:
         assert result.exit_code == 0
         data = json.loads(out_file.read_text())
         assert "mem_matching" in data
-        assert data["mem_matching"] == [[3, 4]]
+        assert data["mem_matching"] == [[3, 4, 1]]
 
 
 class TestEncodeFromFile:

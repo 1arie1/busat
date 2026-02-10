@@ -111,7 +111,7 @@ def solve_from_file(file_path: str, timeout: int = 0) -> dict[str, Any]:
         solver.add_constraint(c)
 
     bus_ids = {b.id for b in problem.buses}
-    mem_ids = {m.id for m in problem.mems}
+    mem_muls = {m.id: m.multiplicity for m in problem.mems}
 
     result = solver.check()
     if result == z3.sat:
@@ -127,8 +127,10 @@ def solve_from_file(file_path: str, timeout: int = 0) -> dict[str, Any]:
             if z3.is_true(z3_model.eval(mv, model_completion=True)):
                 if id_a in bus_ids:
                     matching.append((id_a, id_b))
-                else:
-                    mem_matching.append((id_a, id_b))
+                elif id_a in mem_muls:
+                    mul_var = z3_vars.get(mem_muls[id_a])
+                    mul_val = z3_model.eval(mul_var, model_completion=True).as_long() if mul_var is not None else None
+                    mem_matching.append((id_a, id_b, mul_val))
         return {
             "status": "sat",
             "model": model,
