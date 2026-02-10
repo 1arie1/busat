@@ -71,10 +71,7 @@ class TestUnaryMinus:
 
 class TestNestedArithmetic:
     def test_nested_ops(self) -> None:
-        text = (
-            "BUS\n1: p, a\n2: q, b\n\n"
-            "DEFS\np := 1\nq := -1\na := (2 + 3) * 4\nb := 20\n"
-        )
+        text = "BUS\n1: p, a\n2: q, b\n\n" "DEFS\np := 1\nq := -1\na := (2 + 3) * 4\nb := 20\n"
         result = _solve(text)
         assert result == z3.sat
 
@@ -225,6 +222,128 @@ c > b
         a = model.eval(z3_vars["a"], model_completion=True).as_long()
         x = model.eval(z3_vars["x"], model_completion=True).as_long()
         assert a == x
+
+
+class TestMemMatching:
+    def test_two_mem_sat(self) -> None:
+        text = (
+            "MEM\n"
+            "1: p, as1, ptr1, b0_1, b1_1, b2_1, b3_1, ts1\n"
+            "2: q, as2, ptr2, b0_2, b1_2, b2_2, b3_2, ts2\n\n"
+            "DEFS\n"
+            "p := 1\nq := -1\n"
+            "as1 := 1\nas2 := 1\nptr1 := 100\nptr2 := 100\n"
+            "b0_1 := 10\nb0_2 := 10\nb1_1 := 20\nb1_2 := 20\n"
+            "b2_1 := 30\nb2_2 := 30\nb3_1 := 40\nb3_2 := 40\n"
+            "ts1 := 5\nts2 := 5\n"
+        )
+        result = _solve(text)
+        assert result == z3.sat
+
+    def test_two_mem_unsat_args(self) -> None:
+        text = (
+            "MEM\n"
+            "1: p, as1, ptr1, b0_1, b1_1, b2_1, b3_1, ts1\n"
+            "2: q, as2, ptr2, b0_2, b1_2, b2_2, b3_2, ts2\n\n"
+            "DEFS\n"
+            "p := 1\nq := -1\n"
+            "as1 := 1\nas2 := 2\nptr1 := 100\nptr2 := 100\n"
+            "b0_1 := 10\nb0_2 := 10\nb1_1 := 20\nb1_2 := 20\n"
+            "b2_1 := 30\nb2_2 := 30\nb3_1 := 40\nb3_2 := 40\n"
+            "ts1 := 5\nts2 := 5\n"
+        )
+        result = _solve(text)
+        assert result == z3.unsat
+
+    def test_mem_self_match(self) -> None:
+        text = (
+            "MEM\n1: p, as1, ptr1, b0, b1, b2, b3, ts\n\n"
+            "DEFS\np := 0\nas1 := 1\nptr1 := 100\n"
+            "b0 := 10\nb1 := 20\nb2 := 30\nb3 := 40\nts := 5\n"
+        )
+        result = _solve(text)
+        assert result == z3.sat
+
+    def test_bus_and_mem_independent(self) -> None:
+        """One BUS and one MEM, both nonzero mult — each pool has an odd member, so UNSAT."""
+        text = (
+            "BUS\n1: p, a\n\n"
+            "MEM\n2: q, as1, ptr1, b0, b1, b2, b3, ts\n\n"
+            "DEFS\np := 1\nq := 1\nas1 := 1\nptr1 := 100\n"
+            "b0 := 10\nb1 := 20\nb2 := 30\nb3 := 40\nts := 5\na := 7\n"
+        )
+        result = _solve(text)
+        assert result == z3.unsat
+
+    def test_bus_and_mem_sat(self) -> None:
+        """BUS pair matches, MEM pair matches — SAT."""
+        text = (
+            "BUS\n1: p1, a1\n2: p2, a2\n\n"
+            "MEM\n3: m1, as1, ptr1, b0_1, b1_1, b2_1, b3_1, ts1\n"
+            "4: m2, as2, ptr2, b0_2, b1_2, b2_2, b3_2, ts2\n\n"
+            "DEFS\n"
+            "p1 := 1\np2 := -1\na1 := 7\na2 := 7\n"
+            "m1 := 1\nm2 := -1\n"
+            "as1 := 1\nas2 := 1\nptr1 := 100\nptr2 := 100\n"
+            "b0_1 := 10\nb0_2 := 10\nb1_1 := 20\nb1_2 := 20\n"
+            "b2_1 := 30\nb2_2 := 30\nb3_1 := 40\nb3_2 := 40\n"
+            "ts1 := 5\nts2 := 5\n"
+        )
+        result = _solve(text)
+        assert result == z3.sat
+
+
+class TestTsEntry:
+    def test_ts_entry_injected_when_mem_present(self) -> None:
+        text = (
+            "MEM\n1: p, as1, ptr1, b0, b1, b2, b3, ts\n"
+            "2: q, as2, ptr2, b02, b12, b22, b32, ts2\n\n"
+            "DEFS\np := 1\nq := -1\n"
+            "as1 := 1\nas2 := 1\nptr1 := 100\nptr2 := 100\n"
+            "b0 := 10\nb02 := 10\nb1 := 20\nb12 := 20\n"
+            "b2 := 30\nb22 := 30\nb3 := 40\nb32 := 40\n"
+            "ts := 5\nts2 := 5\n"
+        )
+        problem = parse_text(text)
+        encoder = BusatEncoder(problem)
+        encoder.encode()
+        z3_vars = encoder.get_z3_vars()
+        assert "TS_ENTRY" in z3_vars
+
+    def test_ts_entry_absent_when_no_mem(self) -> None:
+        text = "BUS\n1: p, a\n2: q, b\n\nDEFS\np := 1\nq := -1\na := 5\nb := 5\n"
+        problem = parse_text(text)
+        encoder = BusatEncoder(problem)
+        encoder.encode()
+        z3_vars = encoder.get_z3_vars()
+        assert "TS_ENTRY" not in z3_vars
+
+    def test_ts_entry_usable_in_constraints(self) -> None:
+        text = (
+            "MEM\n1: p, as1, ptr1, b0, b1, b2, b3, ts\n"
+            "2: q, as2, ptr2, b02, b12, b22, b32, ts2\n\n"
+            "DEFS\np := 1\nq := -1\n"
+            "as1 := 1\nas2 := 1\nptr1 := 100\nptr2 := 100\n"
+            "b0 := 10\nb02 := 10\nb1 := 20\nb12 := 20\n"
+            "b2 := 30\nb22 := 30\nb3 := 40\nb32 := 40\n"
+            "ts := 5\nts2 := 5\n\n"
+            "CONSTRAINTS\nTS_ENTRY >= 0\n"
+        )
+        result = _solve(text)
+        assert result == z3.sat
+
+    def test_ts_entry_usable_in_defs(self) -> None:
+        text = (
+            "MEM\n1: p, as1, ptr1, b0, b1, b2, b3, ts\n"
+            "2: q, as2, ptr2, b02, b12, b22, b32, ts2\n\n"
+            "DEFS\np := 1\nq := -1\n"
+            "as1 := 1\nas2 := 1\nptr1 := 100\nptr2 := 100\n"
+            "b0 := 10\nb02 := 10\nb1 := 20\nb12 := 20\n"
+            "b2 := 30\nb22 := 30\nb3 := 40\nb32 := 40\n"
+            "ts := TS_ENTRY\nts2 := TS_ENTRY\n"
+        )
+        result = _solve(text)
+        assert result == z3.sat
 
 
 class TestUnsupportedOps:

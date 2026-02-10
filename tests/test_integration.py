@@ -93,9 +93,7 @@ class TestCLI:
 
     def test_encode_only_stdout(self) -> None:
         runner = CliRunner()
-        result = runner.invoke(
-            main, ["solve", "--encode-only", str(FIXTURES / "simple_sat.bus")]
-        )
+        result = runner.invoke(main, ["solve", "--encode-only", str(FIXTURES / "simple_sat.bus")])
         assert result.exit_code == 0
         assert "assert" in result.output or "declare-fun" in result.output
 
@@ -119,9 +117,7 @@ class TestCLI:
 
     def test_show_model_sat(self) -> None:
         runner = CliRunner()
-        result = runner.invoke(
-            main, ["solve", "--show-model", str(FIXTURES / "simple_sat.bus")]
-        )
+        result = runner.invoke(main, ["solve", "--show-model", str(FIXTURES / "simple_sat.bus")])
         assert result.exit_code == 0
         assert "Bus matching:" in result.output
         assert "bus 1 <-> bus 2" in result.output
@@ -130,9 +126,7 @@ class TestCLI:
 
     def test_show_model_unsat(self) -> None:
         runner = CliRunner()
-        result = runner.invoke(
-            main, ["solve", "--show-model", str(FIXTURES / "simple_unsat.bus")]
-        )
+        result = runner.invoke(main, ["solve", "--show-model", str(FIXTURES / "simple_unsat.bus")])
         assert result.exit_code == 1
         assert "Bus matching:" not in result.output
 
@@ -143,6 +137,54 @@ class TestCLI:
         result = runner.invoke(main, ["solve", "--show-model", str(bus_file)])
         assert result.exit_code == 0
         assert "bus 1 <-> self" in result.output
+
+
+class TestSolveFromFileMem:
+    def test_mem_sat(self) -> None:
+        result = solve_from_file(str(FIXTURES / "mem_sat.bus"))
+        assert result["status"] == "sat"
+        assert result["mem_matching"] == [(1, 2)]
+        assert result["matching"] == []
+
+    def test_mem_unsat(self) -> None:
+        result = solve_from_file(str(FIXTURES / "mem_unsat.bus"))
+        assert result["status"] == "unsat"
+        assert result["mem_matching"] is None
+
+    def test_bus_and_mem_sat(self) -> None:
+        result = solve_from_file(str(FIXTURES / "bus_and_mem_sat.bus"))
+        assert result["status"] == "sat"
+        assert result["matching"] == [(1, 2)]
+        assert result["mem_matching"] == [(3, 4)]
+
+
+class TestCLIMem:
+    def test_show_model_mem_matching(self) -> None:
+        runner = CliRunner()
+        result = runner.invoke(main, ["solve", "--show-model", str(FIXTURES / "mem_sat.bus")])
+        assert result.exit_code == 0
+        assert "Mem matching:" in result.output
+        assert "mem 1 <-> mem 2" in result.output
+
+    def test_show_model_bus_and_mem(self) -> None:
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["solve", "--show-model", str(FIXTURES / "bus_and_mem_sat.bus")]
+        )
+        assert result.exit_code == 0
+        assert "Bus matching:" in result.output
+        assert "Mem matching:" in result.output
+
+    def test_json_output_contains_mem_matching(self, tmp_path: Path) -> None:
+        out_file = tmp_path / "result.json"
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["solve", str(FIXTURES / "bus_and_mem_sat.bus"), "-o", str(out_file)]
+        )
+        assert result.exit_code == 0
+        data = json.loads(out_file.read_text())
+        assert "mem_matching" in data
+        assert data["mem_matching"] == [[3, 4]]
 
 
 class TestEncodeFromFile:

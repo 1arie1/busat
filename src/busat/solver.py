@@ -86,17 +86,32 @@ def solve_from_file(file_path: str, timeout: int = 0) -> dict[str, Any]:
     try:
         problem = parse_file(file_path)
     except ParseError as e:
-        return {"status": "error", "model": None, "matching": None, "message": f"Parse error: {e}"}
+        return {
+            "status": "error",
+            "model": None,
+            "matching": None,
+            "mem_matching": None,
+            "message": f"Parse error: {e}",
+        }
 
     try:
         encoder = BusatEncoder(problem)
         constraints = encoder.encode()
     except EncoderError as e:
-        return {"status": "error", "model": None, "matching": None, "message": f"Encoding error: {e}"}
+        return {
+            "status": "error",
+            "model": None,
+            "matching": None,
+            "mem_matching": None,
+            "message": f"Encoding error: {e}",
+        }
 
     solver = BusatSolver(timeout=timeout)
     for c in constraints:
         solver.add_constraint(c)
+
+    bus_ids = {b.id for b in problem.buses}
+    mem_ids = {m.id for m in problem.mems}
 
     result = solver.check()
     if result == z3.sat:
@@ -107,16 +122,33 @@ def solve_from_file(file_path: str, timeout: int = 0) -> dict[str, Any]:
             val = z3_model.eval(var, model_completion=True)
             model[name] = val.as_long() if hasattr(val, "as_long") else str(val)
         matching = []
+        mem_matching = []
         for (id_a, id_b), mv in encoder.get_match_vars().items():
             if z3.is_true(z3_model.eval(mv, model_completion=True)):
-                matching.append((id_a, id_b))
+                if id_a in bus_ids:
+                    matching.append((id_a, id_b))
+                else:
+                    mem_matching.append((id_a, id_b))
         return {
             "status": "sat",
             "model": model,
             "matching": matching,
+            "mem_matching": mem_matching,
             "message": "SAT — satisfying assignment found",
         }
     elif result == z3.unsat:
-        return {"status": "unsat", "model": None, "matching": None, "message": "UNSAT — no satisfying assignment exists"}
+        return {
+            "status": "unsat",
+            "model": None,
+            "matching": None,
+            "mem_matching": None,
+            "message": "UNSAT — no satisfying assignment exists",
+        }
     else:
-        return {"status": "unknown", "model": None, "matching": None, "message": "UNKNOWN — solver could not decide"}
+        return {
+            "status": "unknown",
+            "model": None,
+            "matching": None,
+            "mem_matching": None,
+            "message": "UNKNOWN — solver could not decide",
+        }

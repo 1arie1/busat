@@ -74,6 +74,13 @@ def solve(
                 click.echo(f"  bus {id_a} <-> self (multiplicity = 0)")
             else:
                 click.echo(f"  bus {id_a} <-> bus {id_b}")
+        if result.get("mem_matching"):
+            click.echo("Mem matching:")
+            for id_a, id_b in result["mem_matching"]:
+                if id_a == id_b:
+                    click.echo(f"  mem {id_a} <-> self (multiplicity = 0)")
+                else:
+                    click.echo(f"  mem {id_a} <-> mem {id_b}")
         click.echo("Variable assignments:")
         for name, val in sorted(result["model"].items()):
             click.echo(f"  {name} = {val}")
@@ -94,7 +101,6 @@ def solve(
         sys.exit(1)
     else:
         sys.exit(2)
-
 
 
 if __name__ == "__main__":

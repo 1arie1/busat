@@ -5,8 +5,10 @@ from busat.parser import (
     parse_text,
     ParseError,
     BusInteraction,
+    MemInteraction,
     _split_sections,
     _parse_bus_section,
+    _parse_mem_section,
     _parse_defs_section,
     _parse_constraints_section,
 )
@@ -139,3 +141,65 @@ c > b
         problem = parse_text("BUS\n1: p, a\n2: q, b\n")
         assert len(problem.definitions) == 0
         assert len(problem.constraints) == 0
+
+    def test_mem_only_file(self) -> None:
+        text = "MEM\n1: p, as1, ptr, b0, b1, b2, b3, ts\n2: q, as2, ptr2, b02, b12, b22, b32, ts2\n"
+        problem = parse_text(text)
+        assert len(problem.mems) == 2
+        assert len(problem.buses) == 0
+
+    def test_neither_bus_nor_mem_raises(self) -> None:
+        with pytest.raises(ParseError, match="missing BUS or MEM"):
+            parse_text("DEFS\na := 1\n")
+
+    def test_duplicate_id_across_bus_and_mem_raises(self) -> None:
+        text = "BUS\n1: p, a\n2: q, b\n\nMEM\n2: m, as1, ptr, b0, b1, b2, b3, ts\n"
+        with pytest.raises(ParseError, match="duplicate id"):
+            parse_text(text)
+
+
+class TestSplitSectionsMem:
+    def test_mem_section_recognized(self) -> None:
+        text = "MEM\n1: p, as1, ptr, b0, b1, b2, b3, ts\n"
+        sections = _split_sections(text)
+        assert "MEM" in sections
+
+    def test_bus_and_mem_sections(self) -> None:
+        text = "BUS\n1: p, a\n\nMEM\n2: q, as1, ptr, b0, b1, b2, b3, ts\n"
+        sections = _split_sections(text)
+        assert "BUS" in sections
+        assert "MEM" in sections
+
+
+class TestParseMemSection:
+    def test_basic(self) -> None:
+        mems = _parse_mem_section("1: p, as1, ptr, b0, b1, b2, b3, ts\n")
+        assert len(mems) == 1
+        assert mems[0] == MemInteraction(
+            id=1,
+            multiplicity="p",
+            address_space="as1",
+            pointer="ptr",
+            byte0="b0",
+            byte1="b1",
+            byte2="b2",
+            byte3="b3",
+            timestamp="ts",
+        )
+        assert mems[0].arguments == ["as1", "ptr", "b0", "b1", "b2", "b3", "ts"]
+
+    def test_wrong_field_count_raises(self) -> None:
+        with pytest.raises(ParseError, match="exactly 8 fields"):
+            _parse_mem_section("1: p, as1, ptr\n")
+
+    def test_too_many_fields_raises(self) -> None:
+        with pytest.raises(ParseError, match="exactly 8 fields"):
+            _parse_mem_section("1: p, as1, ptr, b0, b1, b2, b3, ts, extra\n")
+
+    def test_non_int_id_raises(self) -> None:
+        with pytest.raises(ParseError, match="integer"):
+            _parse_mem_section("abc: p, as1, ptr, b0, b1, b2, b3, ts\n")
+
+    def test_skips_blank_and_comments(self) -> None:
+        mems = _parse_mem_section("\n# comment\n1: p, as1, ptr, b0, b1, b2, b3, ts\n\n")
+        assert len(mems) == 1

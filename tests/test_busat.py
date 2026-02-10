@@ -20,7 +20,7 @@ def test_solver_initialization() -> None:
 def test_simple_sat_check() -> None:
     """Test a simple satisfiability check."""
     solver = BusatSolver()
-    x = z3.Int('x')
+    x = z3.Int("x")
     solver.add_constraint(x > 0)
     solver.add_constraint(x < 10)
     assert solver.check_sat() is True
@@ -29,7 +29,7 @@ def test_simple_sat_check() -> None:
 def test_simple_unsat_check() -> None:
     """Test a simple unsatisfiability check."""
     solver = BusatSolver()
-    x = z3.Int('x')
+    x = z3.Int("x")
     solver.add_constraint(x > 10)
     solver.add_constraint(x < 5)
     assert solver.check_sat() is False
@@ -38,7 +38,7 @@ def test_simple_unsat_check() -> None:
 def test_get_model() -> None:
     """Test getting a model from satisfiable constraints."""
     solver = BusatSolver()
-    x = z3.Int('x')
+    x = z3.Int("x")
     solver.add_constraint(x == 42)
     model = solver.get_model()
     assert model is not None

@@ -7,7 +7,7 @@ from typing import Any
 
 import z3
 
-from busat.parser import BusatProblem
+from busat.parser import BusatProblem, BusInteraction, MemInteraction
 
 
 class EncoderError(Exception):
@@ -28,7 +28,10 @@ class BusatEncoder:
         constraints: list[Any] = []
         constraints.extend(self._encode_definitions())
         constraints.extend(self._encode_constraints())
-        constraints.extend(self._encode_bus_matching())
+        if self.problem.buses:
+            constraints.extend(self._encode_matching_group(self.problem.buses, "m"))
+        if self.problem.mems:
+            constraints.extend(self._encode_matching_group(self.problem.mems, "mm"))
         return constraints
 
     def get_z3_vars(self) -> dict[str, z3.ArithRef]:
@@ -45,6 +48,11 @@ class BusatEncoder:
         for bus in self.problem.buses:
             names.add(bus.multiplicity)
             names.update(bus.arguments)
+        for mem in self.problem.mems:
+            names.add(mem.multiplicity)
+            names.update(mem.arguments)
+        if self.problem.mems:
+            names.add("TS_ENTRY")
         for d in self.problem.definitions:
             names.add(d.variable)
             _collect_names(d.expression_ast, names)
@@ -129,18 +137,19 @@ class BusatEncoder:
         """Encode each constraint expression directly."""
         return [self._ast_to_z3(c.expression_ast) for c in self.problem.constraints]
 
-    def _encode_bus_matching(self) -> list[Any]:
-        """Encode pairwise bus matching with pseudo-boolean constraints."""
-        buses = self.problem.buses
-        n = len(buses)
+    def _encode_matching_group(
+        self, interactions: list[BusInteraction] | list[MemInteraction], prefix: str
+    ) -> list[Any]:
+        """Encode pairwise matching with pseudo-boolean constraints for a group of interactions."""
+        n = len(interactions)
         constraints: list[Any] = []
 
         # Create match variables for ordered pairs i < j
         match_vars: dict[tuple[int, int], z3.BoolRef] = {}
         for i in range(n):
             for j in range(i + 1, n):
-                bi, bj = buses[i], buses[j]
-                mv = z3.Bool(f"m_{bi.id}_{bj.id}")
+                bi, bj = interactions[i], interactions[j]
+                mv = z3.Bool(f"{prefix}_{bi.id}_{bj.id}")
                 match_vars[(i, j)] = mv
                 self._match_vars[(bi.id, bj.id)] = mv
 
@@ -155,12 +164,12 @@ class BusatEncoder:
                     aj = self._ast_to_z3(ast.Name(id=arg_j))
                     constraints.append(z3.Implies(mv, ai == aj))
 
-        # Self-match variables: bus i balanced by itself
-        # Also collect involved match vars per bus for pseudo-boolean constraints
+        # Self-match variables: interaction i balanced by itself
+        # Also collect involved match vars per interaction for pseudo-boolean constraints
         involved: dict[int, list[z3.BoolRef]] = {i: [] for i in range(n)}
         for i in range(n):
-            bi = buses[i]
-            mv = z3.Bool(f"m_{bi.id}_{bi.id}")
+            bi = interactions[i]
+            mv = z3.Bool(f"{prefix}_{bi.id}_{bi.id}")
             self._match_vars[(bi.id, bi.id)] = mv
             involved[i].append(mv)
 
@@ -172,7 +181,7 @@ class BusatEncoder:
             involved[i].append(mv)
             involved[j].append(mv)
 
-        # Per bus: exactly one match (AtMost 1 + AtLeast 1)
+        # Per interaction: exactly one match (AtMost 1 + AtLeast 1)
         for i in range(n):
             constraints.append(z3.AtMost(*involved[i], 1))
             constraints.append(z3.AtLeast(*involved[i], 1))
