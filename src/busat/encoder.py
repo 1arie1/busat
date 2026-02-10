@@ -32,6 +32,7 @@ class BusatEncoder:
             constraints.extend(self._encode_matching_group(self.problem.buses, "m"))
         if self.problem.mems:
             constraints.extend(self._encode_matching_group(self.problem.mems, "mm"))
+            constraints.extend(self._encode_mem_self_balancing(self.problem.mems))
         return constraints
 
     def get_z3_vars(self) -> dict[str, z3.ArithRef]:
@@ -137,6 +138,62 @@ class BusatEncoder:
         """Encode each constraint expression directly."""
         return [self._ast_to_z3(c.expression_ast) for c in self.problem.constraints]
 
+    def _encode_mem_self_balancing(self, interactions: list[MemInteraction]) -> list[Any]:
+        """Encode self-balancing constraints for MEM interactions.
+
+        - Input self-match (mul=-1): timestamp must be < TS_ENTRY
+        - Pairwise distinct inputs: different timestamps AND different (as, ptr)
+        - Pairwise distinct outputs: different timestamps AND different (as, ptr)
+        """
+        constraints: list[Any] = []
+        ts_entry = self._z3_vars["TS_ENTRY"]
+
+        # Collect self-match vars and field accessors per interaction
+        n = len(interactions)
+        sm_vars: list[z3.BoolRef] = []
+        muls: list[Any] = []
+        timestamps: list[Any] = []
+        addr_spaces: list[Any] = []
+        pointers: list[Any] = []
+
+        for mem in interactions:
+            sm_vars.append(self._match_vars[(mem.id, mem.id)])
+            muls.append(self._ast_to_z3(ast.Name(id=mem.multiplicity)))
+            timestamps.append(self._ast_to_z3(ast.Name(id=mem.timestamp)))
+            addr_spaces.append(self._ast_to_z3(ast.Name(id=mem.address_space)))
+            pointers.append(self._ast_to_z3(ast.Name(id=mem.pointer)))
+
+        # Per-interaction: input self-match => ts < TS_ENTRY
+        for i in range(n):
+            constraints.append(
+                z3.Implies(z3.And(sm_vars[i], muls[i] == -1), timestamps[i] < ts_entry)
+            )
+
+        # Pairwise constraints for distinct inputs and distinct outputs
+        for i in range(n):
+            for j in range(i + 1, n):
+                # Distinct inputs
+                both_input = z3.And(sm_vars[i], muls[i] == -1, sm_vars[j], muls[j] == -1)
+                constraints.append(z3.Implies(both_input, timestamps[i] != timestamps[j]))
+                constraints.append(
+                    z3.Implies(
+                        both_input,
+                        z3.Not(z3.And(addr_spaces[i] == addr_spaces[j], pointers[i] == pointers[j])),
+                    )
+                )
+
+                # Distinct outputs
+                both_output = z3.And(sm_vars[i], muls[i] == 1, sm_vars[j], muls[j] == 1)
+                constraints.append(z3.Implies(both_output, timestamps[i] != timestamps[j]))
+                constraints.append(
+                    z3.Implies(
+                        both_output,
+                        z3.Not(z3.And(addr_spaces[i] == addr_spaces[j], pointers[i] == pointers[j])),
+                    )
+                )
+
+        return constraints
+
     def _encode_matching_group(
         self, interactions: list[BusInteraction] | list[MemInteraction], prefix: str
     ) -> list[Any]:
@@ -173,9 +230,15 @@ class BusatEncoder:
             self._match_vars[(bi.id, bi.id)] = mv
             involved[i].append(mv)
 
-            # m_i_i => mul_i == 0
+            # Self-match axiom: MEM allows mul in {-1, 0, 1}; BUS requires mul == 0
             mul_i = self._ast_to_z3(ast.Name(id=bi.multiplicity))
-            constraints.append(z3.Implies(mv, mul_i == 0))
+            is_mem = n > 0 and isinstance(interactions[0], MemInteraction)
+            if is_mem:
+                constraints.append(
+                    z3.Implies(mv, z3.Or(mul_i == 0, mul_i == -1, mul_i == 1))
+                )
+            else:
+                constraints.append(z3.Implies(mv, mul_i == 0))
 
         for (i, j), mv in match_vars.items():
             involved[i].append(mv)

@@ -241,12 +241,13 @@ class TestMemMatching:
         assert result == z3.sat
 
     def test_two_mem_unsat_args(self) -> None:
+        """Mismatched args with mul=2 (not self-balanceable) — UNSAT."""
         text = (
             "MEM\n"
             "1: p, as1, ptr1, b0_1, b1_1, b2_1, b3_1, ts1\n"
             "2: q, as2, ptr2, b0_2, b1_2, b2_2, b3_2, ts2\n\n"
             "DEFS\n"
-            "p := 1\nq := -1\n"
+            "p := 2\nq := -2\n"
             "as1 := 1\nas2 := 2\nptr1 := 100\nptr2 := 100\n"
             "b0_1 := 10\nb0_2 := 10\nb1_1 := 20\nb1_2 := 20\n"
             "b2_1 := 30\nb2_2 := 30\nb3_1 := 40\nb3_2 := 40\n"
@@ -344,6 +345,149 @@ class TestTsEntry:
         )
         result = _solve(text)
         assert result == z3.sat
+
+
+class TestMemSelfBalancing:
+    """Tests for MEM self-balancing (input/output self-match)."""
+
+    @staticmethod
+    def _mem_line(id: int, mul: str, as_: str, ptr: str, ts: str) -> str:
+        return f"{id}: {mul}, {as_}, {ptr}, b0_{id}, b1_{id}, b2_{id}, b3_{id}, {ts}"
+
+    def test_single_input_self_match(self) -> None:
+        """1 MEM, mul=-1, ts unconstrained — SAT (solver picks TS_ENTRY > ts)."""
+        text = (
+            "MEM\n"
+            f"{self._mem_line(1, 'p', 'as1', 'ptr1', 'ts1')}\n\n"
+            "DEFS\np := -1\nas1 := 1\nptr1 := 100\n"
+            "b0_1 := 10\nb1_1 := 20\nb2_1 := 30\nb3_1 := 40\nts1 := 5\n"
+        )
+        result = _solve(text)
+        assert result == z3.sat
+
+    def test_single_output_self_match(self) -> None:
+        """1 MEM, mul=1 — SAT."""
+        text = (
+            "MEM\n"
+            f"{self._mem_line(1, 'p', 'as1', 'ptr1', 'ts1')}\n\n"
+            "DEFS\np := 1\nas1 := 1\nptr1 := 100\n"
+            "b0_1 := 10\nb1_1 := 20\nb2_1 := 30\nb3_1 := 40\nts1 := 5\n"
+        )
+        result = _solve(text)
+        assert result == z3.sat
+
+    def test_input_ts_ge_ts_entry_unsat(self) -> None:
+        """1 MEM, mul=-1, ts=5, TS_ENTRY=3 — UNSAT (ts must be < TS_ENTRY)."""
+        text = (
+            "MEM\n"
+            f"{self._mem_line(1, 'p', 'as1', 'ptr1', 'ts1')}\n\n"
+            "DEFS\np := -1\nas1 := 1\nptr1 := 100\n"
+            "b0_1 := 10\nb1_1 := 20\nb2_1 := 30\nb3_1 := 40\n"
+            "ts1 := 5\nTS_ENTRY := 3\n"
+        )
+        result = _solve(text)
+        assert result == z3.unsat
+
+    def test_two_inputs_distinct_ts_and_ptr(self) -> None:
+        """2 MEM, both mul=-1, different ts, different ptr — SAT."""
+        text = (
+            "MEM\n"
+            f"{self._mem_line(1, 'p1', 'as1', 'ptr1', 'ts1')}\n"
+            f"{self._mem_line(2, 'p2', 'as2', 'ptr2', 'ts2')}\n\n"
+            "DEFS\np1 := -1\np2 := -1\n"
+            "as1 := 1\nas2 := 1\nptr1 := 100\nptr2 := 200\n"
+            "b0_1 := 10\nb0_2 := 10\nb1_1 := 20\nb1_2 := 20\n"
+            "b2_1 := 30\nb2_2 := 30\nb3_1 := 40\nb3_2 := 40\n"
+            "ts1 := 1\nts2 := 2\n"
+        )
+        result = _solve(text)
+        assert result == z3.sat
+
+    def test_two_inputs_same_ts_unsat(self) -> None:
+        """2 MEM, both mul=-1, same ts — UNSAT."""
+        text = (
+            "MEM\n"
+            f"{self._mem_line(1, 'p1', 'as1', 'ptr1', 'ts1')}\n"
+            f"{self._mem_line(2, 'p2', 'as2', 'ptr2', 'ts2')}\n\n"
+            "DEFS\np1 := -1\np2 := -1\n"
+            "as1 := 1\nas2 := 2\nptr1 := 100\nptr2 := 200\n"
+            "b0_1 := 10\nb0_2 := 10\nb1_1 := 20\nb1_2 := 20\n"
+            "b2_1 := 30\nb2_2 := 30\nb3_1 := 40\nb3_2 := 40\n"
+            "ts1 := 5\nts2 := 5\n"
+        )
+        result = _solve(text)
+        assert result == z3.unsat
+
+    def test_two_inputs_same_as_and_ptr_unsat(self) -> None:
+        """2 MEM, both mul=-1, diff ts, same as & ptr — UNSAT."""
+        text = (
+            "MEM\n"
+            f"{self._mem_line(1, 'p1', 'as1', 'ptr1', 'ts1')}\n"
+            f"{self._mem_line(2, 'p2', 'as2', 'ptr2', 'ts2')}\n\n"
+            "DEFS\np1 := -1\np2 := -1\n"
+            "as1 := 1\nas2 := 1\nptr1 := 100\nptr2 := 100\n"
+            "b0_1 := 10\nb0_2 := 10\nb1_1 := 20\nb1_2 := 20\n"
+            "b2_1 := 30\nb2_2 := 30\nb3_1 := 40\nb3_2 := 40\n"
+            "ts1 := 1\nts2 := 2\n"
+        )
+        result = _solve(text)
+        assert result == z3.unsat
+
+    def test_two_outputs_distinct_ts_and_ptr(self) -> None:
+        """2 MEM, both mul=1, different ts, different ptr — SAT."""
+        text = (
+            "MEM\n"
+            f"{self._mem_line(1, 'p1', 'as1', 'ptr1', 'ts1')}\n"
+            f"{self._mem_line(2, 'p2', 'as2', 'ptr2', 'ts2')}\n\n"
+            "DEFS\np1 := 1\np2 := 1\n"
+            "as1 := 1\nas2 := 1\nptr1 := 100\nptr2 := 200\n"
+            "b0_1 := 10\nb0_2 := 10\nb1_1 := 20\nb1_2 := 20\n"
+            "b2_1 := 30\nb2_2 := 30\nb3_1 := 40\nb3_2 := 40\n"
+            "ts1 := 1\nts2 := 2\n"
+        )
+        result = _solve(text)
+        assert result == z3.sat
+
+    def test_two_outputs_same_ts_unsat(self) -> None:
+        """2 MEM, both mul=1, same ts — UNSAT."""
+        text = (
+            "MEM\n"
+            f"{self._mem_line(1, 'p1', 'as1', 'ptr1', 'ts1')}\n"
+            f"{self._mem_line(2, 'p2', 'as2', 'ptr2', 'ts2')}\n\n"
+            "DEFS\np1 := 1\np2 := 1\n"
+            "as1 := 1\nas2 := 2\nptr1 := 100\nptr2 := 200\n"
+            "b0_1 := 10\nb0_2 := 10\nb1_1 := 20\nb1_2 := 20\n"
+            "b2_1 := 30\nb2_2 := 30\nb3_1 := 40\nb3_2 := 40\n"
+            "ts1 := 5\nts2 := 5\n"
+        )
+        result = _solve(text)
+        assert result == z3.unsat
+
+    def test_mixed_input_output_self_match(self) -> None:
+        """2 MEM, mul=-1 and mul=1 — SAT (no cross-type constraint)."""
+        text = (
+            "MEM\n"
+            f"{self._mem_line(1, 'p1', 'as1', 'ptr1', 'ts1')}\n"
+            f"{self._mem_line(2, 'p2', 'as2', 'ptr2', 'ts2')}\n\n"
+            "DEFS\np1 := -1\np2 := 1\n"
+            "as1 := 1\nas2 := 1\nptr1 := 100\nptr2 := 100\n"
+            "b0_1 := 10\nb0_2 := 10\nb1_1 := 20\nb1_2 := 20\n"
+            "b2_1 := 30\nb2_2 := 30\nb3_1 := 40\nb3_2 := 40\n"
+            "ts1 := 5\nts2 := 5\n"
+        )
+        result = _solve(text)
+        assert result == z3.sat
+
+    def test_self_match_mul_2_fails(self) -> None:
+        """1 MEM, mul=2 — UNSAT (self-match only allows 0, -1, 1)."""
+        text = (
+            "MEM\n"
+            f"{self._mem_line(1, 'p', 'as1', 'ptr1', 'ts1')}\n\n"
+            "DEFS\np := 2\nas1 := 1\nptr1 := 100\n"
+            "b0_1 := 10\nb1_1 := 20\nb2_1 := 30\nb3_1 := 40\nts1 := 5\n"
+        )
+        result = _solve(text)
+        assert result == z3.unsat
 
 
 class TestUnsupportedOps:

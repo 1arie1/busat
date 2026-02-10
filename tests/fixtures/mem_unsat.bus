@@ -3,8 +3,8 @@ MEM
 2: q, as2, ptr2, b0_2, b1_2, b2_2, b3_2, ts2
 
 DEFS
-p := 1
-q := -1
+p := 2
+q := -2
 as1 := 1
 as2 := 2
 ptr1 := 100
