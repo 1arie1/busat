@@ -29,9 +29,9 @@ Black is configured for 100-char line length. MyPy runs in strict mode (`disallo
 Input File (.bus) → parser.py → BusatProblem → encoder.py → Z3 Constraints → solver.py → Result
 ```
 
-**parser.py** — Parses `.bus` files (BUS/DEFS/CONSTRAINTS sections) into dataclasses (`BusatProblem`, `BusInteraction`, `Definition`, `Constraint`). Expressions are parsed via Python's `ast` module and stored as `ast.expr` nodes for the encoder to translate.
+**parser.py** — Parses `.bus` files (BUS/MEM/DEFS/CONSTRAINTS sections) into dataclasses (`BusatProblem`, `BusInteraction`, `MemInteraction`, `Definition`, `Constraint`). Expressions are parsed via Python's `ast` module and stored as `ast.expr` nodes for the encoder to translate.
 
-**encoder.py** — `BusatEncoder` walks the parsed AST nodes and translates them to Z3 expressions (`_ast_to_z3`). Bus matching creates Boolean variables `m_i_j` for each pair and `m_i_i` for self-matching, with implication axioms and `AtMost`/`AtLeast` pseudo-boolean constraints ensuring exactly one match per bus. Names that parse as integers become `z3.IntVal` instead of `z3.Int` variables.
+**encoder.py** — `BusatEncoder` walks the parsed AST nodes and translates them to Z3 expressions (`_ast_to_z3`). Bus matching creates Boolean variables `m_i_j` for each pair and `m_i_i` for self-matching, with implication axioms and `AtMost`/`AtLeast` pseudo-boolean constraints ensuring exactly one match per bus. MEM matching uses the same scheme (prefix `mm_`) but relaxes self-match to allow `mul ∈ {-1, 0, 1}`. `_encode_mem_self_balancing` adds input timestamp bounds (`ts < TS_ENTRY`) and pairwise distinctness constraints for self-balanced inputs/outputs. Names that parse as integers become `z3.IntVal` instead of `z3.Int` variables.
 
 **solver.py** — `BusatSolver` wraps Z3. `solve_from_file()` runs the full pipeline and returns `{"status", "model", "matching", "message"}`. `encode_from_file()` returns the SMT-LIB2 formula without solving.
 
