@@ -489,6 +489,50 @@ class TestMemSelfBalancing:
         result = _solve(text)
         assert result == z3.unsat
 
+    def test_input_bytes_in_range_sat(self) -> None:
+        """Input self-match with bytes in [0, 255] — SAT."""
+        text = (
+            "MEM\n"
+            f"{self._mem_line(1, 'p', 'as1', 'ptr1', 'ts1')}\n\n"
+            "DEFS\np := -1\nas1 := 1\nptr1 := 100\n"
+            "b0_1 := 0\nb1_1 := 127\nb2_1 := 255\nb3_1 := 42\nts1 := 5\n"
+        )
+        result = _solve(text)
+        assert result == z3.sat
+
+    def test_input_byte_negative_unsat(self) -> None:
+        """Input self-match with b0 = -1 — UNSAT (byte out of range)."""
+        text = (
+            "MEM\n"
+            f"{self._mem_line(1, 'p', 'as1', 'ptr1', 'ts1')}\n\n"
+            "DEFS\np := -1\nas1 := 1\nptr1 := 100\n"
+            "b0_1 := -1\nb1_1 := 20\nb2_1 := 30\nb3_1 := 40\nts1 := 5\n"
+        )
+        result = _solve(text)
+        assert result == z3.unsat
+
+    def test_input_byte_over_255_unsat(self) -> None:
+        """Input self-match with b2 = 256 — UNSAT (byte out of range)."""
+        text = (
+            "MEM\n"
+            f"{self._mem_line(1, 'p', 'as1', 'ptr1', 'ts1')}\n\n"
+            "DEFS\np := -1\nas1 := 1\nptr1 := 100\n"
+            "b0_1 := 10\nb1_1 := 20\nb2_1 := 256\nb3_1 := 40\nts1 := 5\n"
+        )
+        result = _solve(text)
+        assert result == z3.unsat
+
+    def test_output_bytes_not_range_checked(self) -> None:
+        """Output self-match with b0 = -1 — SAT (byte range only applies to inputs)."""
+        text = (
+            "MEM\n"
+            f"{self._mem_line(1, 'p', 'as1', 'ptr1', 'ts1')}\n\n"
+            "DEFS\np := 1\nas1 := 1\nptr1 := 100\n"
+            "b0_1 := -1\nb1_1 := 20\nb2_1 := 30\nb3_1 := 40\nts1 := 5\n"
+        )
+        result = _solve(text)
+        assert result == z3.sat
+
 
 class TestUnsupportedOps:
     def test_unsupported_binop_raises(self) -> None:

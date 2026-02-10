@@ -156,18 +156,27 @@ class BusatEncoder:
         addr_spaces: list[Any] = []
         pointers: list[Any] = []
 
+        bytes_list: list[list[Any]] = []
+
         for mem in interactions:
             sm_vars.append(self._match_vars[(mem.id, mem.id)])
             muls.append(self._ast_to_z3(ast.Name(id=mem.multiplicity)))
             timestamps.append(self._ast_to_z3(ast.Name(id=mem.timestamp)))
             addr_spaces.append(self._ast_to_z3(ast.Name(id=mem.address_space)))
             pointers.append(self._ast_to_z3(ast.Name(id=mem.pointer)))
+            bytes_list.append([
+                self._ast_to_z3(ast.Name(id=mem.byte0)),
+                self._ast_to_z3(ast.Name(id=mem.byte1)),
+                self._ast_to_z3(ast.Name(id=mem.byte2)),
+                self._ast_to_z3(ast.Name(id=mem.byte3)),
+            ])
 
-        # Per-interaction: input self-match => ts < TS_ENTRY
+        # Per-interaction: input self-match => ts < TS_ENTRY and bytes in [0, 255]
         for i in range(n):
-            constraints.append(
-                z3.Implies(z3.And(sm_vars[i], muls[i] == -1), timestamps[i] < ts_entry)
-            )
+            input_self = z3.And(sm_vars[i], muls[i] == -1)
+            constraints.append(z3.Implies(input_self, timestamps[i] < ts_entry))
+            for b in bytes_list[i]:
+                constraints.append(z3.Implies(input_self, z3.And(b >= 0, b <= 255)))
 
         # Pairwise constraints for distinct inputs and distinct outputs
         for i in range(n):
