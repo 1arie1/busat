@@ -128,8 +128,11 @@ def solve_from_file(file_path: str, timeout: int = 0) -> dict[str, Any]:
                 if id_a in bus_ids:
                     matching.append((id_a, id_b))
                 elif id_a in mem_muls:
-                    mul_var = z3_vars.get(mem_muls[id_a])
-                    mul_val = z3_model.eval(mul_var, model_completion=True).as_long() if mul_var is not None else None
+                    mul_name = mem_muls[id_a]
+                    if mul_name in z3_vars:
+                        mul_val = z3_model.eval(z3_vars[mul_name], model_completion=True).as_long()
+                    else:
+                        mul_val = int(mul_name)
                     mem_matching.append((id_a, id_b, mul_val))
         return {
             "status": "sat",
