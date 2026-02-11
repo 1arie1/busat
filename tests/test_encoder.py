@@ -29,6 +29,20 @@ def _solve_model(text: str) -> tuple[z3.CheckSatResult, z3.ModelRef | None, dict
     return result, model, encoder.get_z3_vars()
 
 
+def _solve_full(
+    text: str,
+) -> tuple[z3.CheckSatResult, z3.ModelRef | None, dict[str, z3.ArithRef], dict[tuple[int, int], z3.BoolRef]]:
+    """Helper: parse, encode, solve, return (result, model, z3_vars, match_vars)."""
+    problem = parse_text(text)
+    encoder = BusatEncoder(problem)
+    constraints = encoder.encode()
+    solver = z3.Solver()
+    solver.add(constraints)
+    result = solver.check()
+    model = solver.model() if result == z3.sat else None
+    return result, model, encoder.get_z3_vars(), encoder.get_match_vars()
+
+
 class TestDefinitionEncoding:
     def test_simple_definition(self) -> None:
         text = "BUS\n1: p, a\n2: q, b\n\nDEFS\np := 1\nq := -1\na := 5\nb := 5\n"
@@ -532,6 +546,76 @@ class TestMemSelfBalancing:
         )
         result = _solve(text)
         assert result == z3.sat
+
+
+class TestAliasedPointers:
+    """Tests for aliased/non-aliased pointer scenarios with MEM self-balancing."""
+
+    _BASE = (
+        "MEM\n"
+        "## read ptr0\n"
+        "0: -1, 2, ptr0, b0_0, b0_1, b0_2, b0_3, ts_prev_0\n"
+        "1: 1, 2, ptr0, b0_0, b0_1, b0_2, b0_3, ts0\n"
+        "## write new value at ptr0\n"
+        "2: -1, 2, ptr0, aux_0, aux_1, aux_2, aux_3, ts_prev_1\n"
+        "3: 1, 2, ptr0, 0, 1, 2, 3, ts1\n"
+        "## read current value of ptr1\n"
+        "4: -1, 2, ptr1, b1_0, b1_1, b1_2, b1_3, ts_prev_2\n"
+        "5: 1, 2, ptr1, b1_0, b1_1, b1_2, b1_3, ts2\n\n"
+        "DEFS\n"
+        "ts0 := TS_ENTRY\nts1 := TS_ENTRY + 1\nts2 := TS_ENTRY + 2\n\n"
+        "CONSTRAINTS\n"
+        "ts_prev_0 < ts0\nts_prev_1 < ts1\nts_prev_2 < ts2\n"
+        "TS_ENTRY == 0\n"
+    )
+
+    @staticmethod
+    def _count_self_balancing(
+        model: z3.ModelRef,
+        match_vars: dict[tuple[int, int], z3.BoolRef],
+        z3_vars: dict[str, z3.ArithRef],
+        muls: dict[int, str],
+    ) -> tuple[int, int]:
+        """Count self-balanced inputs and outputs from a solved model."""
+        inputs = 0
+        outputs = 0
+        for (id_a, id_b), mv in match_vars.items():
+            if id_a != id_b:
+                continue
+            if not z3.is_true(model.eval(mv, model_completion=True)):
+                continue
+            mul_name = muls.get(id_a)
+            if mul_name is None:
+                continue
+            if mul_name in z3_vars:
+                mul_val = model.eval(z3_vars[mul_name], model_completion=True).as_long()
+            else:
+                mul_val = int(mul_name)
+            if mul_val == -1:
+                inputs += 1
+            elif mul_val == 1:
+                outputs += 1
+        return inputs, outputs
+
+    def test_aliased_sat(self) -> None:
+        """ptr0 == ptr1: SAT with one self-balanced input and one output."""
+        text = self._BASE + "ptr0 == ptr1\n"
+        result, model, z3_vars, match_vars = _solve_full(text)
+        assert result == z3.sat
+        muls = {0: "-1", 1: "1", 2: "-1", 3: "1", 4: "-1", 5: "1"}
+        inputs, outputs = self._count_self_balancing(model, match_vars, z3_vars, muls)
+        assert inputs == 1
+        assert outputs == 1
+
+    def test_not_aliased_sat(self) -> None:
+        """ptr0 != ptr1: SAT with two self-balanced inputs and two outputs."""
+        text = self._BASE + "ptr0 != ptr1\n"
+        result, model, z3_vars, match_vars = _solve_full(text)
+        assert result == z3.sat
+        muls = {0: "-1", 1: "1", 2: "-1", 3: "1", 4: "-1", 5: "1"}
+        inputs, outputs = self._count_self_balancing(model, match_vars, z3_vars, muls)
+        assert inputs == 2
+        assert outputs == 2
 
 
 class TestUnsupportedOps:
